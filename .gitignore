@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+.env.*
+!backend/.env.example
+
+# Node.js
+node_modules/
+dist/
+build/
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Project uploads
+uploads/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
