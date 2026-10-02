@@ -3,13 +3,13 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
 from pwdlib import PasswordHash
 from fastapi.responses import JSONResponse
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.config import COOKIE_DOMAIN, COOKIE_SAMESITE, COOKIE_SECURE
-from app.models import Student
+from app.models import Admin, Student
 from app.schemas import (
     AccessTokenResponse,
     StudentRegistrationRequest,
@@ -24,6 +24,7 @@ from app.refresh_tokens import (
     REFRESH_COOKIE_NAME,
     RefreshSessionError,
     create_refresh_session,
+    create_admin_refresh_session,
     revoke_refresh_session,
     rotate_refresh_session,
 )
@@ -89,18 +90,28 @@ def _refresh_error_response(error: RefreshSessionError) -> JSONResponse:
 
 
 def _duplicate_detail(db: Session, payload: StudentRegistrationRequest) -> str | None:
+    normalized_email = payload.email.lower()
+    normalized_student_id = payload.student_id.lower()
     email_exists = db.scalar(
-        select(Student.id).where(Student.email == payload.email)
+        select(Student.id).where(func.lower(Student.email) == normalized_email)
     ) is not None
     student_id_exists = db.scalar(
-        select(Student.id).where(Student.student_id == payload.student_id)
+        select(Student.id).where(func.lower(Student.student_id) == normalized_student_id)
+    ) is not None
+    admin_email_exists = db.scalar(
+        select(Admin.id).where(func.lower(Admin.email) == normalized_email)
+    ) is not None
+    admin_student_id_exists = db.scalar(
+        select(Admin.id).where(func.lower(Admin.email) == normalized_student_id)
     ) is not None
 
-    if email_exists and student_id_exists:
+    if (email_exists or admin_email_exists) and (
+        student_id_exists or admin_student_id_exists
+    ):
         return "Email and student ID are already registered."
-    if email_exists:
+    if email_exists or admin_email_exists:
         return "Email is already registered."
-    if student_id_exists:
+    if student_id_exists or admin_student_id_exists:
         return "Student ID is already registered."
     return None
 
@@ -114,16 +125,26 @@ def register_student(
     payload: StudentRegistrationRequest,
     db: Session = Depends(get_db),
 ) -> StudentRegistrationResponse:
+    normalized_email = payload.email.lower()
+    normalized_student_id = payload.student_id.lower()
     try:
         existing_student = db.scalar(
             select(Student.id).where(
                 or_(
-                    Student.email == payload.email,
-                    Student.student_id == payload.student_id,
+                    func.lower(Student.email) == normalized_email,
+                    func.lower(Student.student_id) == normalized_student_id,
                 )
             )
         )
-        if existing_student is not None:
+        existing_admin = db.scalar(
+            select(Admin.id).where(
+                or_(
+                    func.lower(Admin.email) == normalized_email,
+                    func.lower(Admin.email) == normalized_student_id,
+                )
+            )
+        )
+        if existing_student is not None or existing_admin is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=_duplicate_detail(db, payload),
@@ -131,9 +152,9 @@ def register_student(
 
         student = Student(
             full_name=payload.full_name,
-            student_id=payload.student_id,
+            student_id=normalized_student_id,
             college_name=payload.college_name,
-            email=payload.email,
+            email=normalized_email,
             hashed_password=password_hasher.hash(payload.password),
         )
         db.add(student)
@@ -184,28 +205,51 @@ def login_student(
     db: Session = Depends(get_db),
 ) -> StudentLoginResponse:
     identifier = payload.identifier.strip()
-    student = db.scalar(
-        select(Student).where(
-            or_(
-                Student.email == identifier.lower(),
-                Student.student_id == identifier,
+    normalized_identifier = identifier.lower()
+    admin = db.scalar(
+        select(Admin).where(func.lower(Admin.email) == normalized_identifier)
+    )
+    if admin is not None:
+        if not admin.is_active or not password_hasher.verify(
+            payload.password,
+            admin.hashed_password,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or Student ID, or password.",
+            )
+        account_id = admin.id
+        account_type = "admin"
+        full_name = admin.full_name
+        student_id = None
+        create_refresh = create_admin_refresh_session
+    else:
+        student = db.scalar(
+            select(Student).where(
+                or_(
+                    func.lower(Student.email) == normalized_identifier,
+                    func.lower(Student.student_id) == normalized_identifier,
+                )
             )
         )
-    )
-
-    if student is None or not password_hasher.verify(
-        payload.password,
-        student.hashed_password,
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or Student ID, or password.",
-        )
+        if student is None or not password_hasher.verify(
+            payload.password,
+            student.hashed_password,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or Student ID, or password.",
+            )
+        account_id = student.id
+        account_type = "student"
+        full_name = student.full_name
+        student_id = student.student_id
+        create_refresh = create_refresh_session
 
     try:
-        refresh_grant = create_refresh_session(
+        refresh_grant = create_refresh(
             db,
-            student.id,
+            account_id,
             remember_me=payload.remember_me,
         )
     except RefreshSessionError as error:
@@ -217,11 +261,12 @@ def login_student(
     _set_refresh_cookies(response, refresh_grant)
     return StudentLoginResponse(
         message="Login successful.",
-        id=student.id,
-        student_id=student.student_id,
-        full_name=student.full_name,
-        access_token=create_access_token(student.id),
+        id=account_id,
+        student_id=student_id,
+        full_name=full_name,
+        access_token=create_access_token(account_id, account_type=account_type),
         token_type="bearer",
+        account_type=account_type,
     )
 
 
@@ -246,7 +291,12 @@ def refresh_access_token(
         return _refresh_error_response(error)
 
     _set_refresh_cookies(response, grant)
-    return AccessTokenResponse(access_token=create_access_token(grant.session.student_id))
+    return AccessTokenResponse(
+        access_token=create_access_token(
+            grant.account_id,
+            account_type=grant.account_type,
+        )
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import FRONTEND_ORIGINS
-from app.models import RefreshSession
+from app.models import Admin, AdminRefreshSession, RefreshSession
 
 REFRESH_COOKIE_NAME = "student_hub_refresh"
 CSRF_COOKIE_NAME = "student_hub_csrf"
@@ -27,9 +27,11 @@ class RefreshSessionError(Exception):
 
 @dataclass(frozen=True)
 class RefreshGrant:
-    session: RefreshSession
+    session: RefreshSession | AdminRefreshSession
     refresh_token: str
     csrf_token: str
+    account_type: str
+    account_id: int
 
 
 def _token_hash(token: str) -> str:
@@ -64,7 +66,8 @@ def _validate_csrf(
 
 def _create_grant(
     db: Session,
-    student_id: int,
+    account_id: int,
+    account_type: str,
     remember_me: bool,
     family_id: str,
     expires_at: datetime | None = None,
@@ -75,8 +78,10 @@ def _create_grant(
         REMEMBERED_REFRESH_LIFETIME if remember_me else NORMAL_REFRESH_LIFETIME
     )
     expires_at = expires_at or (_now() + lifetime)
-    session = RefreshSession(
-        student_id=student_id,
+    session_model = AdminRefreshSession if account_type == "admin" else RefreshSession
+    owner_field = "admin_id" if account_type == "admin" else "student_id"
+    session = session_model(
+        **{owner_field: account_id},
         family_id=family_id,
         token_hash=_token_hash(refresh_token),
         csrf_token_hash=_token_hash(csrf_token),
@@ -85,7 +90,7 @@ def _create_grant(
     )
     db.add(session)
     db.flush()
-    return RefreshGrant(session, refresh_token, csrf_token)
+    return RefreshGrant(session, refresh_token, csrf_token, account_type, account_id)
 
 
 def create_refresh_session(
@@ -97,6 +102,7 @@ def create_refresh_session(
         grant = _create_grant(
             db,
             student_id,
+            "student",
             remember_me,
             family_id=secrets.token_hex(24),
         )
@@ -108,17 +114,65 @@ def create_refresh_session(
         raise RefreshSessionError(503, "Authentication session could not be created.") from None
 
 
-def _revoke_family(db: Session, family_id: str, now: datetime) -> None:
+def create_admin_refresh_session(
+    db: Session,
+    admin_id: int,
+    remember_me: bool,
+) -> RefreshGrant:
+    try:
+        grant = _create_grant(
+            db,
+            admin_id,
+            "admin",
+            remember_me,
+            family_id=secrets.token_hex(24),
+        )
+        db.commit()
+        db.refresh(grant.session)
+        return grant
+    except SQLAlchemyError:
+        db.rollback()
+        raise RefreshSessionError(503, "Authentication session could not be created.") from None
+
+
+def _revoke_family(
+    db: Session,
+    family_id: str,
+    now: datetime,
+    session_model: type[RefreshSession] | type[AdminRefreshSession],
+) -> None:
     db.execute(
-        update(RefreshSession)
+        update(session_model)
         .where(
-            RefreshSession.family_id == family_id,
-            RefreshSession.revoked_at.is_(None),
+            session_model.family_id == family_id,
+            session_model.revoked_at.is_(None),
         )
         .values(revoked_at=now)
         .execution_options(synchronize_session=False)
     )
     db.commit()
+
+
+def _find_session(db: Session, token_hash: str):
+    student_session = db.scalar(
+        select(RefreshSession).where(RefreshSession.token_hash == token_hash)
+    )
+    if student_session is not None:
+        return (
+            student_session,
+            "student",
+            student_session.student_id,
+            RefreshSession,
+        )
+
+    admin_session = db.scalar(
+        select(AdminRefreshSession).where(
+            AdminRefreshSession.token_hash == token_hash
+        )
+    )
+    if admin_session is not None:
+        return admin_session, "admin", admin_session.admin_id, AdminRefreshSession
+    return None
 
 
 def rotate_refresh_session(
@@ -132,20 +186,30 @@ def rotate_refresh_session(
     if not refresh_token:
         raise RefreshSessionError(401, "Refresh session is missing or expired.")
 
-    session = db.scalar(
-        select(RefreshSession).where(
-            RefreshSession.token_hash == _token_hash(refresh_token)
-        )
-    )
-    if session is None:
+    found_session = _find_session(db, _token_hash(refresh_token))
+    if found_session is None:
         raise RefreshSessionError(401, "Refresh session is invalid or expired.")
+    session, account_type, account_id, session_model = found_session
 
     _validate_csrf(session, csrf_cookie, csrf_header)
     now = _now()
 
+    if account_type == "admin":
+        admin = db.get(Admin, account_id)
+        if admin is None or not admin.is_active:
+            try:
+                _revoke_family(db, session.family_id, now, session_model)
+            except SQLAlchemyError:
+                db.rollback()
+                raise RefreshSessionError(
+                    503,
+                    "Authentication session could not be verified.",
+                ) from None
+            raise RefreshSessionError(401, "Admin account is inactive; log in again.")
+
     if session.revoked_at is not None:
         try:
-            _revoke_family(db, session.family_id, now)
+            _revoke_family(db, session.family_id, now, session_model)
         except SQLAlchemyError:
             db.rollback()
             raise RefreshSessionError(503, "Authentication session could not be verified.") from None
@@ -153,7 +217,7 @@ def rotate_refresh_session(
 
     if _as_utc(session.expires_at) <= now:
         try:
-            _revoke_family(db, session.family_id, now)
+            _revoke_family(db, session.family_id, now, session_model)
         except SQLAlchemyError:
             db.rollback()
             raise RefreshSessionError(503, "Authentication session could not be updated.") from None
@@ -161,23 +225,24 @@ def rotate_refresh_session(
 
     try:
         rotation = db.execute(
-            update(RefreshSession)
+            update(session_model)
             .where(
-                RefreshSession.id == session.id,
-                RefreshSession.revoked_at.is_(None),
-                RefreshSession.expires_at > now,
+                session_model.id == session.id,
+                session_model.revoked_at.is_(None),
+                session_model.expires_at > now,
             )
             .values(revoked_at=now)
             .execution_options(synchronize_session=False)
         )
         if rotation.rowcount != 1:
             db.rollback()
-            _revoke_family(db, session.family_id, now)
+            _revoke_family(db, session.family_id, now, session_model)
             raise RefreshSessionError(401, "Refresh token reuse detected; log in again.")
 
         grant = _create_grant(
             db,
-            session.student_id,
+            account_id,
+            account_type,
             session.remember_me,
             session.family_id,
             expires_at=_as_utc(session.expires_at),
@@ -208,21 +273,18 @@ def revoke_refresh_session(
     ):
         raise RefreshSessionError(403, "CSRF validation failed.")
 
-    session = db.scalar(
-        select(RefreshSession).where(
-            RefreshSession.token_hash == _token_hash(refresh_token)
-        )
-    )
-    if session is None:
+    found_session = _find_session(db, _token_hash(refresh_token))
+    if found_session is None:
         return
+    session, _, _, session_model = found_session
 
     _validate_csrf(session, csrf_cookie, csrf_header)
     try:
         db.execute(
-            update(RefreshSession)
+            update(session_model)
             .where(
-                RefreshSession.family_id == session.family_id,
-                RefreshSession.revoked_at.is_(None),
+                session_model.family_id == session.family_id,
+                session_model.revoked_at.is_(None),
             )
             .values(revoked_at=_now())
         )

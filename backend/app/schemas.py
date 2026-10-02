@@ -12,6 +12,12 @@ ProjectCategory = Literal[
     "Other",
 ]
 ProjectStatus = Literal["Completed", "In Progress"]
+ProjectModerationStatus = Literal[
+    "Pending",
+    "Approved",
+    "Rejected",
+    "Changes Requested",
+]
 
 
 class StudentRegistrationRequest(BaseModel):
@@ -25,6 +31,11 @@ class StudentRegistrationRequest(BaseModel):
     @classmethod
     def trim_required_text(cls, value):
         return value.strip() if isinstance(value, str) else value
+
+    @field_validator("student_id")
+    @classmethod
+    def normalize_student_id(cls, value: str) -> str:
+        return value.strip().lower()
 
     @field_validator("email")
     @classmethod
@@ -53,10 +64,11 @@ class StudentLoginRequest(BaseModel):
 class StudentLoginResponse(BaseModel):
     message: str
     id: int
-    student_id: str
+    student_id: str | None = None
     full_name: str
     access_token: str
     token_type: str
+    account_type: Literal["student", "admin"]
 
 
 class AccessTokenResponse(BaseModel):
@@ -91,14 +103,28 @@ class ProjectUpdateRequest(ProjectCreateRequest):
     pass
 
 
+class ProjectReviewRequest(BaseModel):
+    feedback: str | None = Field(default=None, max_length=5000)
+
+    @field_validator("feedback", mode="before")
+    @classmethod
+    def trim_feedback(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
 class ProjectResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    owner_id: int
     title: str
     category: ProjectCategory | None
     description: str
     abstract: str | None
     technologies: str | None
     status: ProjectStatus | None
+    moderation_status: ProjectModerationStatus
+    review_feedback: str | None
+    reviewed_by_admin_id: int | None
+    reviewed_at: datetime | None
     created_at: datetime

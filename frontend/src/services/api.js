@@ -137,7 +137,7 @@ async function sendRequest(path, { method, body, authenticated }, token = '') {
   return response
 }
 
-async function request(path, { method = 'GET', body, authenticated = true } = {}) {
+export async function request(path, { method = 'GET', body, authenticated = true } = {}) {
   let token = authenticated ? getAccessToken() : ''
   if (authenticated && !token) {
     try {
@@ -207,6 +207,40 @@ export function deleteProject(projectId) {
 
 export function getStudentProjects() {
   return request('/api/projects')
+}
+
+export function getAdminProjects() {
+  return request('/api/admin/projects')
+}
+
+export function getAdminProject(projectId) {
+  return request(`/api/admin/projects/${encodeURIComponent(projectId)}`)
+}
+
+export function reviewAdminProject(projectId, action, feedback = '') {
+  const normalizedAction = String(action ?? '').trim().toLowerCase()
+  const adminActionPaths = {
+    approve: 'approve',
+    reject: 'reject',
+    'request-changes': 'request-changes',
+  }
+
+  if (!(normalizedAction in adminActionPaths)) {
+    throw new ApiError('Unsupported admin review action.')
+  }
+
+  const trimmedFeedback = typeof feedback === 'string' ? feedback.trim() : ''
+  if (normalizedAction !== 'approve' && !trimmedFeedback) {
+    throw new ApiError('Feedback is required for rejection and change requests.')
+  }
+
+  return request(
+    `/api/admin/projects/${encodeURIComponent(projectId)}/${adminActionPaths[normalizedAction]}`,
+    {
+      method: 'POST',
+      body: { feedback: trimmedFeedback },
+    }
+  )
 }
 
 export async function logoutStudent() {

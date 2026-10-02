@@ -36,6 +36,7 @@ function FormField({
         name={name}
         onChange={onChange}
         placeholder={placeholder}
+        autoComplete={type === 'password' ? 'new-password' : 'off'}
         type={type}
         value={value}
         required
@@ -75,6 +76,7 @@ function PasswordField({
           name={name}
           onChange={onChange}
           placeholder={placeholder}
+          autoComplete="new-password"
           type={showPassword ? 'text' : 'password'}
           value={value}
           required
@@ -241,7 +243,7 @@ export default function Register() {
               </span>
             </div>
 
-            <form className="space-y-4" onSubmit={handleSubmit}>
+            <form autoComplete="off" className="space-y-4" onSubmit={handleSubmit}>
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField
                   id="register-full-name"

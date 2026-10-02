@@ -76,7 +76,7 @@ export default function UploadProject() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <StudentDashboardSidebar
-        activePage="my-projects"
+        activePage="upload"
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         student={student}

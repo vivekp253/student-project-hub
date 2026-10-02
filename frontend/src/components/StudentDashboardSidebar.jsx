@@ -1,11 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { BrandMark, Icon } from './Icons'
 import { logoutStudent } from '../services/api'
-
-const comingSoonItems = [
-  { label: 'Upload Project', icon: 'upload' },
-  { label: 'My Profile', icon: 'users' },
-]
 
 export default function StudentDashboardSidebar({
   activePage = 'dashboard',
@@ -14,8 +10,18 @@ export default function StudentDashboardSidebar({
   student = {},
 }) {
   const navigate = useNavigate()
+  const [isDesktop, setIsDesktop] = useState(() =>
+    window.matchMedia('(min-width: 1024px)').matches
+  )
   const navigationState =
     Object.keys(student).length > 0 ? { student } : undefined
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(min-width: 1024px)')
+    const handleChange = (event) => setIsDesktop(event.matches)
+    mediaQuery.addEventListener('change', handleChange)
+    return () => mediaQuery.removeEventListener('change', handleChange)
+  }, [])
 
   async function handleLogout(event) {
     event.preventDefault()
@@ -41,6 +47,9 @@ export default function StudentDashboardSidebar({
       )}
 
       <aside
+        id="student-dashboard-sidebar"
+        aria-label="Student dashboard navigation"
+        inert={!isOpen && !isDesktop}
         className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-slate-200 bg-white transition-transform duration-200 ${
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
@@ -65,7 +74,7 @@ export default function StudentDashboardSidebar({
           </p>
           <Link
             aria-current={activePage === 'dashboard' ? 'page' : undefined}
-            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${
+            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${
               activePage === 'dashboard'
                 ? 'bg-blue-50 font-bold text-blue-700'
                 : 'text-slate-600 hover:bg-slate-50 hover:text-blue-700'
@@ -78,7 +87,7 @@ export default function StudentDashboardSidebar({
             Dashboard
           </Link>
           <Link
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-blue-700"
+            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
             onClick={onClose}
             state={navigationState}
             to="/student/dashboard#explore"
@@ -89,7 +98,7 @@ export default function StudentDashboardSidebar({
 
           <Link
             aria-current={activePage === 'my-projects' ? 'page' : undefined}
-            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${
+            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${
               activePage === 'my-projects'
                 ? 'bg-blue-50 font-bold text-blue-700'
                 : 'text-slate-600 hover:bg-slate-50 hover:text-blue-700'
@@ -102,26 +111,38 @@ export default function StudentDashboardSidebar({
             My Projects
           </Link>
 
+          <Link
+            aria-current={activePage === 'upload' ? 'page' : undefined}
+            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${
+              activePage === 'upload'
+                ? 'bg-blue-50 font-bold text-blue-700'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-blue-700'
+            }`}
+            onClick={onClose}
+            state={navigationState}
+            to="/student/projects/upload"
+          >
+            <Icon name="upload" size={18} />
+            Upload Project
+          </Link>
+
           <p className="px-3 pb-2 pt-6 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
             Account
           </p>
-          {comingSoonItems.map((item) => (
-            <div
-              aria-disabled="true"
-              className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-400"
-              key={item.label}
-              title={`${item.label} is coming soon`}
-            >
-              <Icon name={item.icon} size={18} />
-              <span>{item.label}</span>
-              <span className="ml-auto text-[10px] font-medium">Soon</span>
-            </div>
-          ))}
+          <div
+            aria-disabled="true"
+            className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-400"
+            title="My Profile is coming soon"
+          >
+            <Icon name="users" size={18} />
+            <span>My Profile</span>
+            <span className="ml-auto text-[10px] font-medium">Soon</span>
+          </div>
         </nav>
 
         <div className="border-t border-slate-100 p-3">
           <Link
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-red-50 hover:text-red-700"
+            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
             onClick={handleLogout}
             to="/login"
           >

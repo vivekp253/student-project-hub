@@ -28,6 +28,22 @@ class Student(Base):
     )
 
 
+class Admin(Base):
+    __tablename__ = "admins"
+    __table_args__ = (
+        UniqueConstraint("email", name="uq_admins_email"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    full_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class Project(Base):
     __tablename__ = "projects"
 
@@ -41,6 +57,16 @@ class Project(Base):
     abstract: Mapped[str | None] = mapped_column(Text, nullable=True)
     technologies: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    moderation_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="Pending", server_default="Pending"
+    )
+    review_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by_admin_id: Mapped[int | None] = mapped_column(
+        ForeignKey("admins.id", ondelete="SET NULL"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -53,6 +79,28 @@ class RefreshSession(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     student_id: Mapped[int] = mapped_column(
         ForeignKey("students.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    family_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    csrf_token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    remember_me: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class AdminRefreshSession(Base):
+    __tablename__ = "admin_refresh_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    admin_id: Mapped[int] = mapped_column(
+        ForeignKey("admins.id", ondelete="CASCADE"), nullable=False, index=True
     )
     family_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     token_hash: Mapped[str] = mapped_column(

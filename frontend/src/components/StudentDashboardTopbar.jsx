@@ -13,6 +13,7 @@ function getInitials(name) {
 }
 
 export default function StudentDashboardTopbar({
+  isMenuOpen = false,
   onMenuClick,
   onSearchChange,
   showSearch = true,
@@ -26,7 +27,9 @@ export default function StudentDashboardTopbar({
       <div className="flex h-[76px] items-center gap-3 px-4 sm:px-8">
         <button
           aria-label="Open dashboard navigation"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 lg:hidden"
+          aria-controls="student-dashboard-sidebar"
+          aria-expanded={isMenuOpen}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 lg:hidden"
           onClick={onMenuClick}
           type="button"
         >
@@ -42,7 +45,7 @@ export default function StudentDashboardTopbar({
               size={18}
             />
             <input
-              className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50"
+              className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
               onChange={(event) => onSearchChange(event.target.value)}
               placeholder="Search projects"
               type="search"

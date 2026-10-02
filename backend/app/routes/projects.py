@@ -48,6 +48,7 @@ def create_project(
         abstract=payload.abstract,
         technologies=payload.technologies,
         status=payload.status,
+        moderation_status="Pending",
     )
 
     try:

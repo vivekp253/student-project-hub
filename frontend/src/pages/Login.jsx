@@ -67,11 +67,6 @@ export default function Login() {
     setError('')
     setSuccess('')
 
-    if (role === 'Admin') {
-      setError('Admin login is not available yet.')
-      return
-    }
-
     if (!identifier.trim() || !password) {
       setError('Please enter your email or student ID and password.')
       return
@@ -90,17 +85,33 @@ export default function Login() {
         setError('The login response did not include an access token.')
         return
       }
+      if (data.account_type !== 'student' && data.account_type !== 'admin') {
+        setError('The login response did not include a valid account type.')
+        return
+      }
 
       storeAccessToken(data.access_token)
-      navigate('/student/dashboard', {
-        state: {
-          student: {
-            id: data.id,
-            student_id: data.student_id,
-            full_name: data.full_name,
+      if (data.account_type === 'admin') {
+        navigate('/admin/dashboard', {
+          state: {
+            admin: {
+              id: data.id,
+              full_name: data.full_name,
+              account_type: data.account_type,
+            },
           },
-        },
-      })
+        })
+      } else {
+        navigate('/student/dashboard', {
+          state: {
+            student: {
+              id: data.id,
+              student_id: data.student_id,
+              full_name: data.full_name,
+            },
+          },
+        })
+      }
     } catch (requestError) {
       setError(
         requestError.status === 401
@@ -174,7 +185,7 @@ export default function Login() {
               </div>
             </div>
 
-            <form className="space-y-5" onSubmit={handleSubmit}>
+            <form autoComplete="off" className="space-y-5" onSubmit={handleSubmit}>
               <div>
                 <label
                   className="mb-2 block text-sm font-bold text-slate-700"
@@ -184,7 +195,8 @@ export default function Login() {
                 </label>
                 <input
                   aria-describedby="identity-error"
-                  autoComplete="username"
+                  autoComplete="off"
+                  spellCheck={false}
                   className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   id="login-identity"
                   name="identity"
@@ -219,7 +231,8 @@ export default function Login() {
                 <div className="relative">
                   <input
                     aria-describedby="password-error"
-                    autoComplete="current-password"
+                    autoComplete="off"
+                    spellCheck={false}
                     className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                     id="login-password"
                     name="password"

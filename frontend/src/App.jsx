@@ -2,15 +2,17 @@ import { HeroVisual } from './components/HeroVisual'
 import { ArrowLink, SectionHeading } from './components/SectionHeading'
 import { BrandMark, Icon } from './components/Icons'
 import { Navbar } from './components/Navbar'
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import StudentDashboard from './pages/StudentDashboard'
 import ProjectDetails from './pages/ProjectDetails'
 import MyProjects from './pages/MyProjects'
 import UploadProject from './pages/UploadProject'
+import AdminDashboard from './pages/AdminDashboard'
+import AdminProjectReview from './pages/AdminProjectReview'
+import ProtectedAdminRoute from './components/ProtectedAdminRoute'
 
-// Local UI data is intentionally shaped like future API responses.
 const features = [
   { icon: 'search', title: 'Explore Projects', description: 'Discover projects created by students across different domains.', color: 'blue' },
   { icon: 'book', title: 'Learn From Seniors', description: 'Understand how real projects were planned, developed and documented.', color: 'violet' },
@@ -36,7 +38,6 @@ const categories = [
   { icon: 'cloud', title: 'Cloud Computing', projects: '17 projects', color: 'violet' },
 ]
 
-// Replace these demonstration records with approved project data from the backend later.
 const featuredProjects = [
   { title: 'Dengue Prediction Using CBC Data', category: 'AI / Machine Learning', description: 'A classification model that explores blood count data to support early dengue prediction.', icon: 'brain', accent: 'blue' },
   { title: 'Mental Health Detection', category: 'Data Science', description: 'A thoughtful data-driven study for identifying patterns in student mental health.', icon: 'users', accent: 'violet' },
@@ -45,7 +46,10 @@ const featuredProjects = [
 
 function Button({ children, href = '#projects', secondary = false }) {
   return (
-    <a className={`group inline-flex items-center justify-center gap-3 rounded-xl px-5 py-3.5 text-sm font-bold transition-all duration-200 hover:-translate-y-0.5 ${secondary ? 'border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700 hover:shadow-xl'}`} href={href}>
+    <a
+      className={`group inline-flex items-center justify-center gap-3 rounded-xl px-5 py-3.5 text-sm font-bold transition-all duration-200 hover:-translate-y-0.5 ${secondary ? 'border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700 hover:shadow-xl'}`}
+      href={href}
+    >
       {children}
       <Icon className="transition-transform duration-200 group-hover:translate-x-1" name="arrow" size={17} />
     </a>
@@ -197,6 +201,23 @@ function App() {
       <Route element={<MyProjects />} path="/student/projects" />
       <Route element={<UploadProject />} path="/student/projects/upload" />
       <Route element={<ProjectDetails />} path="/projects/:projectId" />
+      <Route
+        element={
+          <ProtectedAdminRoute>
+            <AdminDashboard />
+          </ProtectedAdminRoute>
+        }
+        path="/admin/dashboard"
+      />
+      <Route
+        element={
+          <ProtectedAdminRoute>
+            <AdminProjectReview />
+          </ProtectedAdminRoute>
+        }
+        path="/admin/projects/:projectId"
+      />
+      <Route element={<Navigate to="/" replace />} path="*" />
     </Routes>
   )
 }

@@ -21,6 +21,9 @@ COOKIE_SECURE = os.getenv(
 ).strip().lower() == "true"
 COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "lax").strip().lower()
 COOKIE_DOMAIN = os.getenv("COOKIE_DOMAIN", "").strip() or None
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip()
+ADMIN_FULL_NAME = os.getenv("ADMIN_FULL_NAME", "").strip()
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
 if COOKIE_SAMESITE not in {"lax", "strict", "none"}:
 	raise RuntimeError("COOKIE_SAMESITE must be Lax, Strict, or None.")
